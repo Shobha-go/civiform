@@ -4,17 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import auth.UatProfile;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import models.Account;
 import models.Applicant;
 import models.Application;
 import models.LifecycleStage;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 import repository.UserRepository;
 import repository.WithPostgresContainer;
 import services.LocalizedStrings;
@@ -40,6 +44,7 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
   private QuestionDefinition questionDefinition;
   private ProgramDefinition programDefinition;
   private UserRepository userRepository;
+  private UatProfile profile;
 
   @Before
   public void setUp() throws Exception {
@@ -48,6 +53,12 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
     userRepository = instanceOf(UserRepository.class);
     createQuestions();
     createProgram();
+
+    profile = Mockito.mock(UatProfile.class);
+    Account account = new Account();
+    account.setEmailAddress("test@example.com");
+    Mockito.when(profile.isTrustedIntermediary()).thenReturn(true);
+    Mockito.when(profile.getAccount()).thenReturn(CompletableFuture.completedFuture(account));
   }
 
   @Test
@@ -395,7 +406,7 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
 
     Application application =
         subject
-            .submitApplication(applicant.id, programDefinition.id())
+            .submitApplication(applicant.id, programDefinition.id(), profile)
             .toCompletableFuture()
             .join();
 
@@ -421,7 +432,7 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
 
     Application oldApplication =
         subject
-            .submitApplication(applicant.id, programDefinition.id())
+            .submitApplication(applicant.id, programDefinition.id(), profile)
             .toCompletableFuture()
             .join();
 
@@ -437,7 +448,7 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
 
     Application newApplication =
         subject
-            .submitApplication(applicant.id, programDefinition.id())
+            .submitApplication(applicant.id, programDefinition.id(), profile)
             .toCompletableFuture()
             .join();
 
@@ -458,7 +469,8 @@ public class ApplicantServiceImplTest extends WithPostgresContainer {
   @Test
   public void submitApplication_failsWithApplicationSubmissionException() {
     assertThatExceptionOfType(CompletionException.class)
-        .isThrownBy(() -> subject.submitApplication(9999L, 9999L).toCompletableFuture().join())
+        .isThrownBy(
+            () -> subject.submitApplication(9999L, 9999L, profile).toCompletableFuture().join())
         .withCauseInstanceOf(ApplicationSubmissionException.class)
         .withMessageContaining("Application", "failed to save");
   }
